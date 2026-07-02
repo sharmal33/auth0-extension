@@ -1,4 +1,5 @@
 {
   "name": "Auth0UISDK",
-  "displayName": "Auth0UISDK"
+  "displayName": "Auth0UISDK",
+  "expo": {}
 }

@@ -15,7 +15,8 @@ export const auth0Config = {
   // offline_access enables refresh tokens so sessions survive app restarts.
   scope: process.env.AUTH0_SCOPE ?? 'openid profile email offline_access',
   // Default DB connection (email+password). Used if a `login` call passes no connection.
-  connection: process.env.AUTH0_CONNECTION ?? 'Username-Password-Authentication',
+  connection:
+    process.env.AUTH0_CONNECTION ?? 'Username-Password-Authentication',
   // Phone-as-identifier DB connection used by the Universal-Login phone method.
   phoneConnection: process.env.AUTH0_PHONE_CONNECTION ?? 'phone-password',
 };
