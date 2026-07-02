@@ -1,101 +1,298 @@
-# auth0-extension
+A **React Native** mobile application built with [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
-A **user custom extension** for App Studio that integrates the [Auth0](https://auth0.com) SDK
-([`react-native-auth0`](https://github.com/auth0/react-native-auth0) **v5**).
+---
 
-Ported from **[101digital/auth0-react-native-app](https://github.com/101digital/auth0-react-native-app)**
-(`frontend/`). That app drives Auth0 through the `useAuth0()` React hook; extension functions are
-**headless** (plain `input -> output`, no React), so the same flows are implemented here with the
-imperative `Auth0` **client class**:
+# Getting Started
 
-| App (hook) | Extension (class API) |
-| --- | --- |
-| `useAuth0().sendSMSCode` | `auth0.auth.passwordlessWithSMS` |
-| `useAuth0().authorizeWithSMS` | `auth0.auth.loginWithSMS` |
-| `useAuth0().authorize` | `auth0.webAuth.authorize` |
-| `useAuth0().getCredentials` / `hasValidCredentials` / `clearCredentials` | `auth0.credentialsManager.*` |
+Follow the steps below **in order** to set up and run the project on your machine.
 
-The hook auto-persists tokens; the class API does not, so we call
-`credentialsManager.saveCredentials()` after a successful login.
+---
 
-The App Studio custom-extension flow pulls this repo, overlays the generated app on top, keeps
-`src/extensions/`, merges `package.json` dependencies, and pushes a review branch.
+## Required Toolchain Versions
 
-## Contents
+This app is pinned to a specific React Native version (see `react-native` in `package.json`). Each RN version requires an exact combination of Node, JDK, Xcode, Android SDK, Ruby, and CocoaPods — using the wrong combination causes obscure build failures.
 
-| Path | Purpose |
-| --- | --- |
-| `src/extensions/config.ts` | Auth0 tenant settings (mirrors the source app's `config.js`). |
-| `src/extensions/Auth0Functions.ts` | Custom functions calling `react-native-auth0` v5. |
-| `src/extensions/index.ts` | `CustomFunctionRegistry` + `executeCustomFunction` the app resolves at runtime. |
-| `package.json` | Declares `react-native-auth0` `^5.7.0` (merged into the app). |
+| RN version | Node | React | JDK | Xcode | Ruby | CocoaPods | Yarn |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **0.85.x** | 22.22.0 – 22.x | 19.2.3 | 17.0.x | **26.1.1** *(latest at time of writing)* | 3.2.x – 3.3.x | 1.15.x – 1.16.x | 1.22.x |
+| **0.81.4** | 20.19.4 – 22.x | 19.1.0 | 17.0.x | **26.1.1** | 3.2.x – 3.3.x | 1.15.x – 1.16.x | 1.22.x |
+| **0.79.1** | 18.18 – 20.x | 19.0.0 | 17.0.x | **26.1.1** | 3.2.x – 3.3.x | 1.15.x – 1.16.x | 1.22.x |
 
-## Flows
+Each cell lists the **tested range** — these are the exact versions this project has been verified against. Newer majors (Node 24, Ruby 3.4, CocoaPods 1.17, Yarn Berry, JDK 21) are not yet supported and may produce obscure build failures.
 
-**Mobile · Native — passwordless SMS OTP** (the primary flow): enter mobile number → Auth0 texts a
-one-time code → verify it in-app. No password, no hosted browser.
+Full matrix (Android Gradle Plugin, compileSdk, targetSdk, minSdk, iOS deployment target) and install guidance: see [SUPPORTED_VERSIONS.md](https://github.com/101digital/app-studio-generator/blob/main/docs/SUPPORTED_VERSIONS.md).
 
-```
-sendPhoneOtp({ phone })   -> Auth0/Twilio SMS
-verifyPhoneOtp({ phone, code })  -> tokens (creates the user on first verify, logs in after)
-```
+**Xcode 26.1.1** is the only tested version for both rows. Older and newer Xcode versions are not supported.
 
-**Mobile · Universal Login** — `login()` opens Auth0's hosted page for the phone-as-identifier
-connection (`phoneConnection`).
+---
 
-## Functions
+## Step 0: Prerequisites (Install Required Tools)
 
-| Function | Input | Output | Notes |
-| --- | --- | --- | --- |
-| `Auth0Functions.sendPhoneOtp` | `{ phone }` | `{ status }` | `'sent'` / `'failed'` — **string routing field**. |
-| `Auth0Functions.verifyPhoneOtp` | `{ phone, code }` | `{ status, accessToken, userId, email }` | `'authenticated'` / `'failed'`. Persists credentials. |
-| `Auth0Functions.login` | `{ signup?, connection? }` | `{ status, accessToken, userId, email }` | Universal Login. `'authenticated'` / `'failed'`. |
-| `Auth0Functions.logout` | `{}` | `{ success }` | `clearCredentials()` (local only, no browser). |
-| `Auth0Functions.getCredentials` | `{}` | `{ hasValidCredentials, accessToken }` | Silent check for an existing valid session. |
+Before you begin, make sure the following tools are installed on your computer.
 
-`status` is a string because response-based routing matches string branch cases
-(`${$ext.auth0.verifyPhoneOtp.status = 'authenticated'}`) — a boolean would never match `case 'authenticated'`.
+### 1. Install Node.js
 
-## Declaring it in the app definition
+Pick the version that matches the React Native version this project is pinned to (see the matrix above):
 
-```ts
-const auth0 = app.useExtension({
-  name: "auth0",
-  functions: [
-    { name: "sendPhoneOtp",   input: { phone: "string" }, output: { status: "string" } },
-    { name: "verifyPhoneOtp", input: { phone: "string", code: "string" },
-      output: { status: "string", accessToken: "string", userId: "string", email: "string" } },
-    { name: "login", input: { signup: "boolean", connection: "string" },
-      output: { status: "string", accessToken: "string", userId: "string", email: "string" } },
-    { name: "logout", input: {}, output: { success: "boolean" } },
-    { name: "getCredentials", input: {}, output: { hasValidCredentials: "boolean", accessToken: "string" } },
-  ],
-});
+| RN version | Tested Node range | Recommended |
+| --- | --- | --- |
+| 0.85.x | **22.22.0 – 22.x** | Node 22 LTS |
+| 0.81.4 | **20.19.4 – 22.x** | Node 22 LTS |
+| 0.79.1 | **18.18 – 20.x** | Node 20 LTS |
+
+> Node 24 has **not** been tested with any of the RN rows and is likely to fail. RN 0.85 requires Node 22.22.0 at minimum — older 22.x patches will fail at install / build time.
+
+Download and install Node.js from [https://nodejs.org](https://nodejs.org). Choose the **LTS** line, or use a version manager such as [`nvm`](https://github.com/nvm-sh/nvm) to install a specific tested version:
+
+```sh
+nvm install 22       # for RN 0.85.x or 0.81.4
+nvm install 20       # for RN 0.79.1
 ```
 
-Trigger `auth0.verifyPhoneOtp` from a button and route on `$ext.auth0.verifyPhoneOtp.status`.
+To verify, open a terminal and run:
 
-## Configuration (`src/extensions/config.ts`)
+```sh
+node --version
+```
 
-Defaults mirror the source app's Auth0 **Native** tenant (public values — no client secret in this
-flow). Override any via env (`AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_AUDIENCE`, `AUTH0_SCOPE`,
-`AUTH0_CONNECTION`, `AUTH0_PHONE_CONNECTION`).
+### 2. Install Yarn (Package Manager)
 
-## Native / Auth0 setup
+This project uses **Yarn Classic** — tested range **1.22.x** (most recent: 1.22.22). Install it globally via npm:
 
-The Auth0 **domain** must also be set in the native projects so the login redirect is captured:
+```sh
+npm install -g yarn@1.22
+```
 
-- **Android** — `android/app/build.gradle`, `defaultConfig.manifestPlaceholders`:
-  ```gradle
-  auth0Domain: "your-tenant.us.auth0.com",
-  auth0Scheme: "${applicationId}.auth0"
-  ```
-- **iOS** — `Info.plist` URL scheme `$(PRODUCT_BUNDLE_IDENTIFIER).auth0`; run `pod install`.
+Verify:
 
-**Auth0 dashboard**
-- Add the callback/logout URLs `<bundleId>.auth0://<domain>/{ios|android}/<bundleId>/callback`.
-- **Passwordless SMS**: enable **Authentication → Passwordless → SMS** (Twilio), and tick
-  **Applications → your app → Advanced → Grant Types → Passwordless OTP** (without it, verify returns
-  *"Grant type not allowed"*). Twilio trial only texts verified numbers.
+```sh
+yarn --version
+```
 
-See the [react-native-auth0 docs](https://github.com/auth0/react-native-auth0) for full setup.
+You should see a `1.22.x` version. **Yarn 2 / 3 / Berry / 4 are not supported** by this project — the lockfile, install hooks, and patch-package integration assume Yarn Classic.
+
+### 3. Install Ruby (tested range 3.2.x – 3.3.x)
+
+Ruby is needed for iOS CocoaPods. **Do not use the system Ruby that ships with macOS** — it lacks the permissions CocoaPods needs. Install a managed version with [rbenv](https://github.com/rbenv/rbenv) or [chruby](https://github.com/postmodern/chruby):
+
+```sh
+rbenv install 3.3.5  # any 3.2.x or 3.3.x release works
+rbenv local 3.3.5
+```
+
+Verify:
+
+```sh
+ruby --version
+```
+
+You should see a `3.2.x` or `3.3.x` release. Ruby 3.4 and 4.x are not yet tested.
+
+### 4. Install Watchman (macOS)
+
+```sh
+brew install watchman
+```
+
+### 5. Install JDK 17 (Android builds)
+
+Android builds require the **JDK 17 line** (tested range **17.0.x**). No other major version is supported by the Android Gradle Plugin this project uses. On macOS the simplest install is via Homebrew:
+
+```sh
+brew install --cask zulu@17
+```
+
+On Windows / Linux, use the [Eclipse Temurin 17](https://adoptium.net/temurin/releases/?version=17) installer.
+
+Set `JAVA_HOME` to point at the JDK 17 install. On macOS with the Homebrew install above:
+
+```sh
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
+```
+
+Add that line to your `~/.zshrc` / `~/.bashrc` so it persists across terminals.
+
+Verify:
+
+```sh
+java -version
+```
+
+You should see `17.0.x`. **JDK 18, 21, and 24 are NOT supported** by this project's Gradle setup — newer JDKs will silently change the bytecode level and break the Android build.
+
+### 6. Set Up Platform-Specific Tools
+
+Follow the official React Native environment setup guide for your target platform:
+
+👉 [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment)
+
+**For Android:**
+
+- Install [Android Studio](https://developer.android.com/studio)
+- During setup, make sure to install the **Android SDK**, **Android SDK Platform**, and **Android Virtual Device (AVD)**
+- Set up the `ANDROID_HOME` environment variable (the guide above explains how)
+- Create an Android Emulator via AVD Manager in Android Studio
+
+**For iOS (macOS only):**
+
+- Install **Xcode 26.1.1** (the version this project is tested on). Download from the [Apple Developer portal](https://developer.apple.com/xcode/) or the Mac App Store.
+- Open Xcode and install the **iOS Simulator** (Xcode → Settings → Platforms → install iOS 15.1 or newer).
+- Install Xcode Command Line Tools:
+
+```sh
+xcode-select --install
+```
+
+Verify Xcode version:
+
+```sh
+xcodebuild -version
+```
+
+You should see `Xcode 26.1.1`. Older Xcode versions are not supported.
+
+---
+
+## Step 1: Install Project Dependencies
+
+Open a terminal, navigate to the project folder, and run:
+
+```sh
+yarn install
+```
+
+> This will install all JavaScript dependencies **and** automatically run `patch-package` and `react-native-asset` as a post-install step.
+
+---
+
+## Step 2: Install iOS Dependencies (macOS / iOS only)
+
+If you plan to run the app on **iOS**, you need to install CocoaPods dependencies.
+
+This project's tested CocoaPods range is **1.15.x – 1.16.x**. The `Gemfile` already pins the right Bundler-managed version, so you don't need to install CocoaPods globally — `bundle install` below handles it for you. If you have an older system-wide CocoaPods, it will be ignored as long as you use the `bundle exec` flow below. CocoaPods 1.17+ has not been tested.
+
+### First-time setup — install CocoaPods via Ruby Bundler:
+
+```sh
+bundle install
+```
+
+### Then install the pods:
+
+```sh
+cd ios
+pod install
+cd ..
+```
+
+> **Tip:** If you're on an Apple Silicon Mac (M1/M2/M3) and encounter issues, try:
+>
+> ```sh
+> cd ios
+> arch -x86_64 pod install
+> cd ..
+> ```
+>
+> Or use the built-in shortcut script:
+>
+> ```sh
+> yarn install-pod
+> ```
+
+---
+
+## Step 3: Start Metro (JavaScript Bundler)
+
+Metro is the JavaScript bundler for React Native. Start it by running:
+
+```sh
+yarn start
+```
+
+Keep this terminal window **open and running** — it needs to stay active while you use the app.
+
+---
+
+## Step 4: Run the App
+
+Open a **new terminal window** (keep Metro running in the other one) and run:
+
+### Android (Development)
+
+```sh
+yarn android-dev
+```
+
+> Make sure you have an **Android Emulator running** or a **physical device connected via USB** with USB debugging enabled.
+
+### iOS (Development) — macOS only
+
+```sh
+yarn ios-dev
+```
+
+> This will launch the app in the iOS Simulator.
+
+---
+
+## Available Run Commands
+
+| Command                | Description                        |
+| ---------------------- | ---------------------------------- |
+| `yarn android-dev`     | Run on Android (Development build) |
+| `yarn ios-dev`         | Run on iOS (Development build)     |
+| `yarn android-staging` | Run on Android (Staging build)     |
+| `yarn ios-staging`     | Run on iOS (Staging build)         |
+| `yarn android-prod`    | Run on Android (Production build)  |
+| `yarn ios-prod`        | Run on iOS (Production build)      |
+
+---
+
+## Environment Configuration
+
+The project uses [react-native-config](https://github.com/lukewalczak/react-native-config) for environment variables. The following env files are available:
+
+| File               | Used For    |
+| ------------------ | ----------- |
+| `.env.development` | Development |
+| `.env.staging`     | Staging     |
+| `.env.production`  | Production  |
+| `.env`             | Default     |
+
+> These files are already included in the project. You should not need to modify them unless instructed to.
+
+---
+
+
+## Other Useful Commands
+
+| Command            | Description                                     |
+| ------------------ | ----------------------------------------------- |
+| `yarn start`       | Start the Metro bundler                         |
+| `yarn test`        | Run unit tests with Jest                        |
+| `yarn lint`        | Run ESLint on source files                      |
+| `yarn format`      | Format code with Prettier                       |
+| `yarn install-pod` | Install Ruby bundler + CocoaPods (iOS shortcut) |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+- **Metro bundler fails to start** — Make sure no other Metro process is running. Kill it with <kbd>Ctrl</kbd> + <kbd>C</kbd> and try again.
+- **Android build fails** — Ensure `ANDROID_HOME` is set correctly and an emulator is running or a device is connected.
+- **iOS pod install fails** — Try `arch -x86_64 pod install` on Apple Silicon Macs, or delete the `ios/Pods` folder and `ios/Podfile.lock` then re-run `pod install`.
+- **"Command not found: yarn"** — Run `npm install -g yarn` to install Yarn globally.
+- **Node version out of range** — Use the tested Node range for your pinned RN release (see Step 0.1: 18.18 – 20.x for RN 0.79.1, 20.19.4 – 22.x for RN 0.81.4, 22.22.0 – 22.x for RN 0.85.x). Higher Node majors (24+) are not yet tested and will likely fail.
+
+For more help, see the official [React Native Troubleshooting guide](https://reactnative.dev/docs/troubleshooting).
+
+---
+
+## Learn More
+
+- [React Native Docs](https://reactnative.dev/docs/getting-started)
+- [React Native Environment Setup](https://reactnative.dev/docs/set-up-your-environment)
+- [React Navigation](https://reactnavigation.org/docs/getting-started)
+- [`@facebook/react-native`](https://github.com/facebook/react-native) — React Native GitHub repository
