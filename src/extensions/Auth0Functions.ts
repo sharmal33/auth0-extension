@@ -20,6 +20,34 @@ const auth0 = new Auth0({
 const audience = auth0Config.audience || undefined;
 
 /**
+ * Decode a JWT payload (base64url) to read user claims. We deliberately DO NOT call Auth0's
+ * `/userinfo`: the passwordless access token is scoped for the Beacon Edge API (M2M), so `/userinfo`
+ * returns 401 — that call would make verifyPhoneOtp fail even though the OTP verified and tokens
+ * were issued. The ID token's claims (`sub`, `email`) are the correct in-app source; the full
+ * profile / onboarding data comes from the Beacon Edge API using the access token. Best-effort —
+ * returns {} on any error so authentication never fails on token decoding.
+ */
+function decodeIdToken(
+  idToken?: string
+): { sub?: string; email?: string; [k: string]: any } {
+  try {
+    const payload = (idToken || '').split('.')[1];
+    if (!payload) return {};
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const bin = (globalThis as any).atob(b64) as string; // RN 0.74+/browsers provide atob
+    const json = decodeURIComponent(
+      bin
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Auth0Functions — passwordless SMS OTP + Universal Login.
  *
  * Matches the `auth0` extension declaration:
@@ -71,12 +99,14 @@ export class Auth0Functions {
         scope: auth0Config.scope,
       });
       await auth0.credentialsManager.saveCredentials(creds);
-      const user = await auth0.auth.userInfo({ token: creds.accessToken });
+      // Read claims from the ID token — NOT Auth0's /userinfo (which 401s for the Beacon-scoped
+      // access token and would fail an otherwise-successful verification).
+      const claims = decodeIdToken((creds as any).idToken);
       return {
         status: 'authenticated',
         accessToken: creds.accessToken,
-        userId: user.sub ?? '',
-        email: user.email ?? '',
+        userId: claims.sub ?? '',
+        email: claims.email ?? '',
       };
     } catch (e) {
       console.warn('[Auth0Functions] verifyPhoneOtp failed', e);
@@ -107,12 +137,14 @@ export class Auth0Functions {
           : {}),
       });
       await auth0.credentialsManager.saveCredentials(creds);
-      const user = await auth0.auth.userInfo({ token: creds.accessToken });
+      // Read claims from the ID token — NOT Auth0's /userinfo (which 401s for the Beacon-scoped
+      // access token and would fail an otherwise-successful login).
+      const claims = decodeIdToken((creds as any).idToken);
       return {
         status: 'authenticated',
         accessToken: creds.accessToken,
-        userId: user.sub ?? '',
-        email: user.email ?? '',
+        userId: claims.sub ?? '',
+        email: claims.email ?? '',
       };
     } catch (e) {
       console.warn('[Auth0Functions] login failed', e);
